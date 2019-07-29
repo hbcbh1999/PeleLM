@@ -1,0 +1,33 @@
+#include <AMReX_REAL.H>
+
+
+module probdata_module
+
+  use mod_Fvar_def, only: maxspec
+
+  implicit none
+
+  ! from probdata.H
+    REAL_T :: standoff
+    REAL_T :: pertmag
+    
+    ! from bc.H
+    
+    logical :: bcinit
+    
+    REAL_T :: u_bc, v_bc, w_bc
+    REAL_T :: Y_bc(0:maxspec-1,2), T_bc(1), h_bc(1,2), rho_bc(1,2)
+
+    REAL_T :: midtanh
+    REAL_T :: widthtanh
+    REAL_T :: phi_rich
+    REAL_T :: phi_lean
+    REAL_T :: T_in
+    
+    integer, parameter :: flame_dir = 2
+  
+contains
+
+!subroutines here
+
+end module probdata_module
