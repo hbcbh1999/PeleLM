@@ -5748,7 +5748,8 @@ PeleLM::compute_scalar_advection_fluxes_and_divergence (const MultiFab& Force,
   {
     Box gbx=mfi.growntilebox(Godunov::hypgrow());
     auto fab = Smf.array(mfi);
-    AMREX_HOST_DEVICE_FOR_4D ( gbx, nspecies+1, i, j, k, n,
+    int local_nspecies = nspecies;
+    AMREX_HOST_DEVICE_FOR_4D ( gbx, local_nspecies+1, i, j, k, n,
     {
       auto& val = fab(i,j,k,n);
       val = std::abs(val) > 1.e-20 ? val : 0;
