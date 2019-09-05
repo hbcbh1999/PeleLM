@@ -213,6 +213,12 @@ public:
   static void getSpeciesNames(amrex::Vector<std::string>& spn);
 
   static int getSpeciesIdx(const std::string& spName);
+
+  amrex::Real predict_velocity (amrex::Real dt);
+
+  void compute_scalar_advection_fluxes_and_divergence (const amrex::MultiFab& Force,
+                                                       const amrex::MultiFab& divu,
+                                                       amrex::Real            dt);
     
 protected:
 
@@ -356,9 +362,6 @@ private:
                       int             pComp,
                       const amrex::MultiFab* T = 0);
 
-  void compute_scalar_advection_fluxes_and_divergence (const amrex::MultiFab& Force,
-                                                       const amrex::MultiFab& divu,
-                                                       amrex::Real            dt);
 
   void compute_vel_visc (amrex::Real      time,
                          amrex::MultiFab* beta);
@@ -415,8 +418,6 @@ private:
   void post_init_press (amrex::Real&        dt_init,
                         amrex::Vector<int>&  nc_save,
                         amrex::Vector<amrex::Real>& dt_save);
-
-  amrex::Real predict_velocity (amrex::Real dt);
 
   void set_htt_hmixTYP ();
 
