@@ -1,6 +1,10 @@
 
 EBASE = PeleLM
 
+ifeq ($(USE_SUNDIALS_PP),TRUE) 
+  include $(PELE_PHYSICS_HOME)/ThirdParty/Make.ThirdParty
+endif
+
 include $(AMREX_HOME)/Tools/GNUMake/Make.defs 
 
 Bdirs += $(PELELM_HOME)/Source $(PELELM_HOME)/Source/Src_$(DIM)d
@@ -37,9 +41,6 @@ else
 endif
 
 # Reactions
-ifeq ($(USE_SUNDIALS_PP),TRUE) 
-  include $(PELE_PHYSICS_HOME)/ThirdParty/Make.ThirdParty
-endif
 REACTIONS_PATH := $(REACTIONS_HOME)/$(strip $(Reactions_dir))
 include $(REACTIONS_HOME)/Make.package
 include $(REACTIONS_PATH)/Make.package
