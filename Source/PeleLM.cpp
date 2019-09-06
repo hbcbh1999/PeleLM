@@ -30,16 +30,23 @@
 #include <AMReX_ccse-mpi.H>
 #include <AMReX_Utility.H>
 #include <NS_util.H>
+#include "mechanism.h"
 
 #if defined(BL_USE_NEWMECH) || defined(BL_USE_VELOCITY)
 #include <AMReX_DataServices.H>
 #include <AMReX_AmrData.H>
 #endif
 
+
+#ifdef USE_CUDA_CVODE
+#include <GPU_misc.H>
+#include <actual_Creactor_GPU.h>
+#else
 #ifdef USE_SUNDIALS_PP
 #include <actual_Creactor.h>
 #else
 #include <actual_reactor.H> 
+#endif
 #endif
 
 #include <Prob_F.H>
@@ -895,7 +902,7 @@ PeleLM::Initialize_specific ()
     } 
 
     PeleLM::closed_chamber            = 1;
-    if (flag_closed_chamber = true){
+    if (flag_closed_chamber == true){
       PeleLM::closed_chamber            = 0;
     }
 
@@ -5580,6 +5587,101 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
 
     STemp.copy(mf_old,first_spec,0,nspecies+3); // Parallel copy.
     FTemp.copy(Force);                          // Parallel copy.
+
+#ifdef USE_CUDA_CVODE
+    for (MFIter Smfi(STemp,false); Smfi.isValid(); ++Smfi)
+    {
+      cudaError_t cuda_status = cudaSuccess;
+
+      const Box& bx  = Smfi.tilebox();
+      int ncells     = bx.numPts();
+      amrex::Print() << " nb cells ? " << ncells << '\n'; 
+
+      const auto ec  = Gpu::ExecutionConfig(ncells);
+
+      const auto len = amrex::length(bx);
+      const auto lo  = amrex::lbound(bx); 
+
+      const auto rhoY   = STemp.array(Smfi);
+      const auto fcl    = fcnCntTemp.array(Smfi);
+      const auto frcing = FTemp.array(Smfi);
+
+      Real dt_incr = dt;
+      Real time_init = 0;
+
+      amrex::Real fc_pt;
+
+      /* Pack the data NEED THOSE TO BE DEF ALWAYS */
+      int Ncomp = NUM_SPECIES;
+      // rhoY,T
+      amrex::Real *tmp_vect;
+      // rhoY_src_ext
+      amrex::Real *tmp_src_vect;
+      // rhoH
+      amrex::Real *tmp_vect_energy;
+      amrex::Real *tmp_src_vect_energy;
+
+      cudaMallocManaged(&tmp_vect, (Ncomp+1)*ncells*sizeof(amrex::Real));
+      cudaMallocManaged(&tmp_src_vect, Ncomp*ncells*sizeof(amrex::Real));
+      cudaMallocManaged(&tmp_vect_energy, ncells*sizeof(amrex::Real));
+      cudaMallocManaged(&tmp_src_vect_energy, ncells*sizeof(amrex::Real));
+
+      BL_PROFILE_VAR("gpu_flatten()", GPU_MISC);
+      amrex::launch_global<<<ec.numBlocks, ec.numThreads, ec.sharedMem, amrex::Gpu::gpuStream()>>>(
+      [=] AMREX_GPU_DEVICE () noexcept {
+          for (int icell = blockDim.x*blockIdx.x+threadIdx.x, stride = blockDim.x*gridDim.x;
+              icell < ncells; icell += stride) {
+	      int k =  icell /   (len.x*len.y);
+	      int j = (icell - k*(len.x*len.y)) /   len.x;
+	      int i = (icell - k*(len.x*len.y)) - j*len.x;
+	      i += lo.x;
+	      j += lo.y;
+	      k += lo.z;
+	      gpu_flatten(icell, i, j, k, rhoY, frcing,
+			      tmp_vect, tmp_src_vect, tmp_vect_energy, tmp_src_vect_energy);
+	  }
+      });
+      BL_PROFILE_VAR_STOP(GPU_MISC);
+
+      /* Solve */
+      fc_pt = react(tmp_vect, tmp_src_vect,
+		      tmp_vect_energy, tmp_src_vect_energy,
+		      &dt_incr, &time_init,
+		      &cvode_iE, &ncells, amrex::Gpu::gpuStream());
+      dt_incr = dt;
+
+      /* Unpacking of data */
+      BL_PROFILE_VAR_START(GPU_MISC);
+      amrex::launch_global<<<ec.numBlocks, ec.numThreads, ec.sharedMem, amrex::Gpu::gpuStream()>>>(
+      [=] AMREX_GPU_DEVICE () noexcept {
+          for (int icell = blockDim.x*blockIdx.x+threadIdx.x, stride = blockDim.x*gridDim.x;
+              icell < ncells; icell += stride) {
+	      int k =  icell /   (len.x*len.y);
+	      int j = (icell - k*(len.x*len.y)) /   len.x;
+	      int i = (icell - k*(len.x*len.y)) - j*len.x;
+	      i += lo.x;
+	      j += lo.y;
+	      k += lo.z;
+	      gpu_unflatten(icell, i, j, k, rhoY,
+			      tmp_vect, tmp_vect_energy);
+	  }
+      });
+      BL_PROFILE_VAR_STOP(GPU_MISC);
+
+
+      /* Clean */
+      cudaFree(tmp_vect);
+      cudaFree(tmp_src_vect);
+      cudaFree(tmp_vect_energy);
+      cudaFree(tmp_src_vect_energy);
+
+      cuda_status = cudaStreamSynchronize(amrex::Gpu::gpuStream());
+
+    }
+
+
+#else
+
 #ifdef _OPENMP
 #pragma omp parallel
 #endif  
@@ -5605,7 +5707,6 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       
       Real dt_incr = dt;
       Real time_init = 0;
-      int reInit = 1;
       double pressure = 1.0; // dummy FIXME
 
       const auto len = amrex::length(bx);
@@ -5658,6 +5759,7 @@ PeleLM::advance_chemistry (MultiFab&       mf_old,
       }
 
     }
+#endif
 
     FTemp.clear();
 

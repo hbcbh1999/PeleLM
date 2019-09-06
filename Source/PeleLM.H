@@ -219,6 +219,14 @@ public:
   void compute_scalar_advection_fluxes_and_divergence (const amrex::MultiFab& Force,
                                                        const amrex::MultiFab& divu,
                                                        amrex::Real            dt);
+
+  void advance_chemistry (amrex::MultiFab&       mf_old,
+                          amrex::MultiFab&       mf_new,
+                          amrex::Real            dt,
+                          const amrex::MultiFab& Force,
+                          int             nCompF,
+                          bool            use_stiff_solver = true);
+
     
 protected:
 
@@ -313,13 +321,6 @@ private:
   // enum Solver_Status {HT_InProgress, HT_Stalled, HT_Solved};
 
   void adjust_spec_diffusion_fluxes (amrex::Real time);
-
-  void advance_chemistry (amrex::MultiFab&       mf_old,
-                          amrex::MultiFab&       mf_new,
-                          amrex::Real            dt,
-                          const amrex::MultiFab& Force,
-                          int             nCompF,
-                          bool            use_stiff_solver = true);
 
 #ifdef USE_WBAR
   void calcDiffusivity_Wbar (const amrex::Real time);
