@@ -22,6 +22,7 @@ Backtrace*
 chk*
 grdlog
 *_bu
+AMREX_GPU.o*
 
 # OSX files
 .DS_Store
